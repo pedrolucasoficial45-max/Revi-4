@@ -144,6 +144,7 @@ nav button:hover .a-gear{transform:rotate(90deg)}
 .xh{display:flex;gap:16px;align-items:center}.lvb{flex:none;width:84px;height:84px;border-radius:50%;background:linear-gradient(150deg,#2F5BEA,#14307F);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;box-shadow:0 8px 18px rgba(29,63,160,.3)}.lvb b{font-size:2rem}.lvb small{font-size:.72rem;opacity:.85;margin-top:2px}.xt{font-size:1.7rem;font-weight:800}
 .sg{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}.xc{background:var(--sf);border:1px solid var(--ln);border-radius:18px;padding:16px;box-shadow:0 6px 16px rgba(29,63,160,.08);display:flex;flex-direction:column;gap:2px}.sg .xc b{font-size:1.8rem}
 .hr{display:flex;gap:12px;align-items:center;background:var(--sf);border:1px solid var(--ln);border-radius:16px;padding:12px;margin-bottom:8px}.px{color:var(--ok);white-space:nowrap}
+#vt{display:block;white-space:pre-line;max-height:38vh;overflow:auto}
 </style>
 </head>
 <body>
@@ -168,7 +169,7 @@ if(!r.ok){const e0=d.error,e=new Error(String((e0&&(e0.message||e0))||('Erro '+r
 if(p==='gemini'){const tx=((((d.candidates||[])[0]||{}).content||{}).parts||[]).map(x=>x.text||'').join('');if(!tx){const e=new Error('A IA não devolveu texto.');e.retry=1;throw e}return tx}return p==='anthropic'?d.content.map(x=>x.text||'').join(''):d.choices[0].message.content}
 async function ai(h,sys,js,mx){const c=gc(),p=c.p||'gemini',m=c.m||MD[p];if(!c.k)throw new Error('Cole sua chave em Config e toque em Salvar.');
 const ms=p==='gemini'?[...new Set([m,'gemini-3.5-flash','gemini-3.1-flash-lite','gemini-2.5-flash','gemini-2.5-flash-lite'])]:[m];let last;
-for(const mm of ms){for(let t=0;t<2;t++){try{return await ai1(p,mm,c.k,h,sys,js,mx)}catch(e){last=e;if(!e.retry)throw e;if(e.skip)break;if(t===0)await new Promise(r=>setTimeout(r,1200+Math.random()*800))}}if(last&&last.net)break}
+for(const mm of ms){for(let t=0;t<2;t++){try{return await ai1(p,mm,c.k,h,sys,js,mx)}catch(e){last=e;if(!e.retry)throw e;if(e.skip||e.st===429)break;if(t===0)await new Promise(r=>setTimeout(r,1200+Math.random()*800))}}if(last&&last.net)break}
 if(last&&(last.st===503||last.st===429||last.retry&&!last.net))throw new Error('A IA está sobrecarregada neste momento. Tentei vários modelos. Toque em Tentar de novo em alguns instantes.');throw last}
 const nat=()=>{const C=window.Capacitor;return C&&C.isNativePlatform&&C.isNativePlatform()?C:null};
 let vzN=null,stp=0;
@@ -192,20 +193,32 @@ if(stp!==my)return;
 const b=gac.createBuffer(1,f.length,sr);b.copyToChannel(f,0);
 await new Promise(res=>{const s=gac.createBufferSource();s.buffer=b;s.connect(gac.destination);gsrc=s;s.onended=res;s.start()});return}
 throw new Error('voz natural indisponível ('+err+')')}
-async function speak(t){t=clean(t);if(!t)return;const C=nat(),my=stp,c=gc();
-if((c.v||'gem')==='gem'&&(c.p||'gemini')==='gemini'&&c.k){try{await gtts(t,my);return}catch(e){if(stp!==my)return;if(!gwarn++)toast('Voz natural indisponível agora. Usando a voz do aparelho.')}}
+let _u=[];
+async function speak(t){t=clean(t);if(!t)return true;const C=nat(),my=stp,c=gc();
+if((c.v||'gem')==='gem'&&(c.p||'gemini')==='gemini'&&c.k){try{await gtts(t,my);return true}catch(e){if(stp!==my)return true;if(!gwarn++)toast('Voz natural indisponível agora. Usando a voz do aparelho.')}}
 if(C){try{const P=C.registerPlugin('TextToSpeech');
 if(vzN===null){try{const r=await P.getSupportedVoices(),vs=r.voices||[],b=bestV(vs);vzN=b?vs.indexOf(b):-1}catch(e){vzN=-1}}
-const o={text:t,lang:'pt-BR',rate:1,pitch:1,volume:1};if(vzN>=0)o.voice=vzN;await P.speak(o);return}catch(e){if(stp!==my)return}}
-if(window.speechSynthesis){const vs=speechSynthesis.getVoices(),b=(c.dv&&vs.find(v=>v.voiceURI===c.dv))||bestV(vs);
-for(const s of chunks(t)){if(stp!==my)return;await new Promise(r=>{const u=new SpeechSynthesisUtterance(s);u.lang=b?b.lang:'pt-BR';if(b)u.voice=b;u.rate=.98;u.pitch=1;u.onend=u.onerror=()=>r();speechSynthesis.speak(u)})}}}
+const o={text:t,lang:'pt-BR',rate:1,pitch:1,volume:1};
+if(vzN>=0){try{await P.speak(Object.assign({},o,{voice:vzN}));return true}catch(e){if(stp!==my)return true;vzN=-1}}
+await P.speak(o);return true}catch(e){if(stp!==my)return true}}
+if(window.speechSynthesis){try{speechSynthesis.resume()}catch(e){}
+const vs=speechSynthesis.getVoices(),b=(c.dv&&vs.find(v=>v.voiceURI===c.dv))||bestV(vs);let ok=true;
+for(const s of chunks(t)){if(stp!==my)return true;
+const r=await new Promise(res=>{const u=new SpeechSynthesisUtterance(s);_u.push(u);u.lang=b?b.lang:'pt-BR';if(b)u.voice=b;u.rate=.98;u.pitch=1;let f=0,tm=0;
+const d=v=>{if(f)return;f=1;clearTimeout(tm);_u=_u.filter(x=>x!==u);res(v)};
+u.onend=()=>d(true);u.onerror=e=>d(!!e&&(e.error==='canceled'||e.error==='interrupted'));
+tm=setTimeout(()=>d(false),Math.max(8000,s.length*140));speechSynthesis.speak(u)});
+if(!r){ok=false;break}}
+if(ok)return true}
+if(stp===my)toast('Este aparelho não tem voz em português funcionando. Instale uma em Configurações do Android, em Texto para fala.');return false}
 function stopAll(){stp++;try{if(gsrc)gsrc.stop()}catch(e){}const C=nat();try{if(C)C.registerPlugin('TextToSpeech').stop()}catch(e){}try{if(window.speechSynthesis)speechSynthesis.cancel()}catch(e){}}
+let gOff=0;
 const gk=()=>{const c=gc();return(c.p||'gemini')==='gemini'&&!!c.k};
 const wav=(bs,sr)=>{let L=0;bs.forEach(b=>L+=b.length);const f=new Float32Array(L);let o=0;bs.forEach(b=>{f.set(b,o);o+=b.length});let mx=0;for(let i=0;i<L;i++)mx=Math.max(mx,Math.abs(f[i]));const g=mx>0?Math.min(8,.8/mx):1;const k=Math.max(1,Math.floor(sr/16000)),n=Math.floor(L/k),R=sr/k,v=new DataView(new ArrayBuffer(44+n*2)),w=(q,t)=>{for(let i=0;i<t.length;i++)v.setUint8(q+i,t.charCodeAt(i))};
 w(0,'RIFF');v.setUint32(4,36+n*2,true);w(8,'WAVEfmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,R,true);v.setUint32(28,R*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n*2,true);
 for(let i=0;i<n;i++){let a=0;for(let j=0;j<k;j++)a+=f[i*k+j];a/=k;v.setInt16(44+i*2,Math.max(-1,Math.min(1,a*g))*32767,true)}return new Uint8Array(v.buffer)};
 async function gstt(u8){let s='';for(let i=0;i<u8.length;i+=8192)s+=String.fromCharCode.apply(null,u8.subarray(i,i+8192));const c=gc(),body=JSON.stringify({contents:[{parts:[{text:'Transcreva fielmente, em português do Brasil, o que a pessoa disse neste áudio. Responda somente com a transcrição. Se não houver fala clara, responda com texto vazio.'},{inlineData:{mimeType:'audio/wav',data:btoa(s)}}]}]});
-for(const m of ['gemini-3.5-flash-lite','gemini-3.1-flash-lite','gemini-2.5-flash-lite','gemini-2.5-flash']){try{const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+m+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':c.k},body});if(!r.ok)continue;const j=await r.json();return((((j.candidates||[])[0]||{}).content||{}).parts||[]).map(x=>x.text||'').join('').trim()}catch(e){}}
+for(const m of ['gemini-3.5-flash-lite','gemini-3.1-flash-lite','gemini-2.5-flash-lite','gemini-2.5-flash']){try{const ac=new AbortController(),tt=setTimeout(()=>ac.abort(),12000);let r;try{r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+m+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':c.k},body,signal:ac.signal})}finally{clearTimeout(tt)}if(!r.ok)continue;const j=await r.json();return((((j.candidates||[])[0]||{}).content||{}).parts||[]).map(x=>x.text||'').join('').trim()}catch(e){}}
 throw new Error('Não consegui transcrever. Verifique a internet e a chave do Gemini.')}
 function ear(on,pre){let noRec=0,rs=null;let acc=pre||'',cur='',alive=true,tm=0,sil=0,err=null,res,hs=[],r=null,rt=0;
 const done=new Promise(x=>res=x),all=()=>(acc+' '+cur).trim();
@@ -216,13 +229,13 @@ const recBegin=async()=>{try{const sm=await navigator.mediaDevices.getUserMedia(
 const ac=new(window.AudioContext||window.webkitAudioContext)();await ac.resume();const sc=ac.createMediaStreamSource(sm),pr=ac.createScriptProcessor(4096,1,1);
 let buf=[],pk=[],talk=0,quiet=0,noise=.008,n=0,busy=0;
 const flush=async()=>{busy=1;const b=buf;buf=[];pk=[];talk=0;quiet=0;const len=b.reduce((a,x)=>a+x.length,0);if(len<ac.sampleRate*.3){busy=0;return}
-try{const t=await gstt(wav(b,ac.sampleRate));if(!alive)return;if(t){bump(t);fin()}else busy=0}catch(e){if(!alive)return;err=e;fin()}};
+try{const t=await gstt(wav(b,ac.sampleRate));if(!alive)return;if(t){bump(t);fin()}else busy=0}catch(e){if(!alive)return;try{rs&&rs.close()}catch(x){}rs=null;noRec=1;if(gOff<Date.now())toast('Transcrição pelo Gemini indisponível agora. Usando o reconhecimento do aparelho.');gOff=Date.now()+120000;begin()}};
 pr.onaudioprocess=e=>{if(!alive||busy)return;const d=new Float32Array(e.inputBuffer.getChannelData(0));let q=0;for(let i=0;i<d.length;i++)q+=d[i]*d[i];const rms=Math.sqrt(q/d.length),th=Math.max(.005,Math.min(noise,.02)*3),ui=x=>{const o=document.getElementById('vt');if(o)o.textContent=x};
 if(n++<3){noise=n===1?rms:Math.min(noise,rms);return}
 if(rms>(talk?th*.6:th)){if(!talk){talk=1;buf=pk.slice();ui('🎙️ Estou ouvindo você…')}quiet=0;buf.push(d)}else if(talk){buf.push(d);quiet+=d.length/ac.sampleRate*1000;if(quiet>=(sil||1800)){ui('Transcrevendo…');flush()}}else{noise=noise*.95+rms*.05;pk.push(d);if(pk.length>2)pk.shift()}};
 sc.connect(pr);pr.connect(ac.destination);rs={close:()=>{try{pr.onaudioprocess=null;pr.disconnect();sc.disconnect();sm.getTracks().forEach(t=>t.stop());ac.close()}catch(e){}}}}
 catch(e){noRec=1;if(alive)begin()}};
-const begin=()=>{if(gk()&&!noRec){recBegin();return}const C=nat();
+const begin=()=>{if(gk()&&!noRec&&gOff<Date.now()){recBegin();return}const C=nat();
 if(C){const P=C.registerPlugin('SpeechRecognition');
 const go=()=>{if(!alive)return;P.start({language:'pt-BR',maxResults:1,partialResults:true,popup:false}).catch(e=>{if(!alive)return;if(++rt>8){err=e;fin()}else setTimeout(go,500)})};
 (async()=>{try{const pm=await P.requestPermissions();if(pm.speechRecognition!=='granted'){err=new Error('Permita o microfone nas configurações do Android.');return fin()}
@@ -434,8 +447,8 @@ const t=(await c.done).trim(),er=c.err;
 if(!vm||!$('#ov'))break;
 if(er){if(++fails>=3){st(er.message||'Não consegui ouvir.','p');vm=false;break}await wait(500);continue}
 if(!t){await wait(300);continue}
-fails=0;vt('');add('u',t);st('Pensando…','p');const a=await ask(t);if(!vm||!$('#ov'))break;
-add('b',a);st('Falando…','f','Toque aqui para interromper.');pend=await speakB(a)}})()}}
+fails=0;add('u',t);st('Pensando…','p','Você: '+t);const a=await ask(t);if(!vm||!$('#ov'))break;
+add('b',a);st('Falando…','f',a+'\n\nToque na tela para interromper.');pend=await speakB(a)}})()}}
 const QO=[['s','Soma','+','#2DBE5A','do 3+7 ao 742+3497'],['b','Subtração','−','#F24B4B','do 9−4 ao troco encadeado'],['m','Multiplicação','×','#F59A0B','da tabuada ao 27×24'],['d','Divisão','÷','#4C6FFF','sempre exata, do 6÷2 ao 1932÷14']];
 const QM=[['tr','🌱','Tranquilo','15 segundos por conta.',15],['vel','⚡','Velocidade','10 segundos por conta.',10],['br','🔥','Brutal','5 segundos por conta.',5]];
 let qm='vel';
@@ -477,7 +490,7 @@ function cfg(){const c=gc();page(hd('Configurações')+`<label for="pv">Serviço
 $('#pv').value=c.p||'gemini';$('#k').value=c.k||'';$('#m').value=c.m||MD[c.p||'gemini'];$('#vv').value=c.v||'gem';$('#gv').value=c.gv||'Kore';const fv=()=>{let vs=[];try{vs=speechSynthesis.getVoices().filter(v=>/^pt/i.test(v.lang))}catch(e){}$('#dv').innerHTML='<option value="">Automática (a melhor disponível)</option>'+vs.map(v=>`<option value="${esc(v.voiceURI)}">${esc(v.name)}</option>`).join('');$('#dv').value=c.dv||''};fv();try{speechSynthesis.onvoiceschanged=fv}catch(e){}
 $('#pv').onchange=()=>{$('#m').value=MD[$('#pv').value]};
 const save=()=>localStorage.setItem('cfg',JSON.stringify({p:$('#pv').value,k:$('#k').value.trim(),m:$('#m').value.trim(),v:$('#vv').value,gv:$('#gv').value,dv:$('#dv').value}));
-$('#tv').onclick=async()=>{try{save()}catch(e){}stopAll();toast('Gerando a voz…');await speak('Oi! Eu sou o Revi. Bora estudar? Me conta o que você viu hoje.')};
+$('#tv').onclick=async()=>{try{save()}catch(e){}stopAll();await new Promise(r=>setTimeout(r,160));toast(gc().v==='dev'?'Tocando a voz do aparelho…':'Gerando a voz…');await speak('Oi! Eu sou o Revi. Bora estudar? Me conta o que você viu hoje.')};
 $('#sv').onclick=()=>{try{save();toast('Salvo neste aparelho ✓')}catch(e){toast('Não foi possível salvar.')}};
 $('#ts').onclick=async()=>{try{save()}catch(e){}toast('Testando…');try{await ai([{r:'user',t:'Diga só: ok'}],'Responda curto.');toast('Chave funcionando ✓')}catch(e){toast(e.message)}}}
 try{Object.assign(D,JSON.parse(localStorage.getItem('decks2')||'{}'))}catch(e){}
