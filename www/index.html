@@ -201,9 +201,9 @@ if(window.speechSynthesis){const vs=speechSynthesis.getVoices(),b=(c.dv&&vs.find
 for(const s of chunks(t)){if(stp!==my)return;await new Promise(r=>{const u=new SpeechSynthesisUtterance(s);u.lang=b?b.lang:'pt-BR';if(b)u.voice=b;u.rate=.98;u.pitch=1;u.onend=u.onerror=()=>r();speechSynthesis.speak(u)})}}}
 function stopAll(){stp++;try{if(gsrc)gsrc.stop()}catch(e){}const C=nat();try{if(C)C.registerPlugin('TextToSpeech').stop()}catch(e){}try{if(window.speechSynthesis)speechSynthesis.cancel()}catch(e){}}
 const gk=()=>{const c=gc();return(c.p||'gemini')==='gemini'&&!!c.k};
-const wav=(bs,sr)=>{let L=0;bs.forEach(b=>L+=b.length);const f=new Float32Array(L);let o=0;bs.forEach(b=>{f.set(b,o);o+=b.length});const k=Math.max(1,Math.floor(sr/16000)),n=Math.floor(L/k),R=sr/k,v=new DataView(new ArrayBuffer(44+n*2)),w=(q,t)=>{for(let i=0;i<t.length;i++)v.setUint8(q+i,t.charCodeAt(i))};
+const wav=(bs,sr)=>{let L=0;bs.forEach(b=>L+=b.length);const f=new Float32Array(L);let o=0;bs.forEach(b=>{f.set(b,o);o+=b.length});let mx=0;for(let i=0;i<L;i++)mx=Math.max(mx,Math.abs(f[i]));const g=mx>0?Math.min(8,.8/mx):1;const k=Math.max(1,Math.floor(sr/16000)),n=Math.floor(L/k),R=sr/k,v=new DataView(new ArrayBuffer(44+n*2)),w=(q,t)=>{for(let i=0;i<t.length;i++)v.setUint8(q+i,t.charCodeAt(i))};
 w(0,'RIFF');v.setUint32(4,36+n*2,true);w(8,'WAVEfmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,R,true);v.setUint32(28,R*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n*2,true);
-for(let i=0;i<n;i++){let a=0;for(let j=0;j<k;j++)a+=f[i*k+j];a/=k;v.setInt16(44+i*2,Math.max(-1,Math.min(1,a))*32767,true)}return new Uint8Array(v.buffer)};
+for(let i=0;i<n;i++){let a=0;for(let j=0;j<k;j++)a+=f[i*k+j];a/=k;v.setInt16(44+i*2,Math.max(-1,Math.min(1,a*g))*32767,true)}return new Uint8Array(v.buffer)};
 async function gstt(u8){let s='';for(let i=0;i<u8.length;i+=8192)s+=String.fromCharCode.apply(null,u8.subarray(i,i+8192));const c=gc(),body=JSON.stringify({contents:[{parts:[{text:'Transcreva fielmente, em português do Brasil, o que a pessoa disse neste áudio. Responda somente com a transcrição. Se não houver fala clara, responda com texto vazio.'},{inlineData:{mimeType:'audio/wav',data:btoa(s)}}]}]});
 for(const m of ['gemini-3.5-flash-lite','gemini-3.1-flash-lite','gemini-2.5-flash-lite','gemini-2.5-flash']){try{const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+m+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':c.k},body});if(!r.ok)continue;const j=await r.json();return((((j.candidates||[])[0]||{}).content||{}).parts||[]).map(x=>x.text||'').join('').trim()}catch(e){}}
 throw new Error('Não consegui transcrever. Verifique a internet e a chave do Gemini.')}
@@ -212,14 +212,14 @@ const done=new Promise(x=>res=x),all=()=>(acc+' '+cur).trim();
 const bump=t=>{cur=t;rt=0;if(on)on(all());if(sil){clearTimeout(tm);tm=setTimeout(fin,sil)}};
 const kill=()=>{try{if(rs)rs.close()}catch(e){}rs=null;try{if(r){r.onend=null;r.onerror=null;r.onresult=null;r.abort()}}catch(e){}r=null;const C=nat();if(C){try{C.registerPlugin('SpeechRecognition').stop()}catch(e){}hs.forEach(h=>{try{h.remove()}catch(e){}});hs=[]}};
 const fin=()=>{if(!alive)return;alive=false;clearTimeout(tm);kill();res(all())};
-const recBegin=async()=>{try{const sm=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});if(!alive){sm.getTracks().forEach(t=>t.stop());return}
+const recBegin=async()=>{try{const sm=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}});if(!alive){sm.getTracks().forEach(t=>t.stop());return}
 const ac=new(window.AudioContext||window.webkitAudioContext)();await ac.resume();const sc=ac.createMediaStreamSource(sm),pr=ac.createScriptProcessor(4096,1,1);
 let buf=[],pk=[],talk=0,quiet=0,noise=.008,n=0,busy=0;
-const flush=async()=>{busy=1;const b=buf;buf=[];pk=[];talk=0;quiet=0;const len=b.reduce((a,x)=>a+x.length,0);if(len<ac.sampleRate*.5){busy=0;return}
+const flush=async()=>{busy=1;const b=buf;buf=[];pk=[];talk=0;quiet=0;const len=b.reduce((a,x)=>a+x.length,0);if(len<ac.sampleRate*.3){busy=0;return}
 try{const t=await gstt(wav(b,ac.sampleRate));if(!alive)return;if(t){bump(t);fin()}else busy=0}catch(e){if(!alive)return;err=e;fin()}};
-pr.onaudioprocess=e=>{if(!alive||busy)return;const d=new Float32Array(e.inputBuffer.getChannelData(0));let q=0;for(let i=0;i<d.length;i++)q+=d[i]*d[i];const rms=Math.sqrt(q/d.length);
-if(n++<3){noise=Math.max(noise,rms);return}
-if(rms>Math.max(.02,noise*2.5)){if(!talk){talk=1;buf=pk.slice()}quiet=0;buf.push(d)}else if(talk){buf.push(d);quiet+=d.length/ac.sampleRate*1000;if(quiet>=(sil||1800))flush()}else{pk.push(d);if(pk.length>2)pk.shift()}};
+pr.onaudioprocess=e=>{if(!alive||busy)return;const d=new Float32Array(e.inputBuffer.getChannelData(0));let q=0;for(let i=0;i<d.length;i++)q+=d[i]*d[i];const rms=Math.sqrt(q/d.length),th=Math.max(.005,Math.min(noise,.02)*3),ui=x=>{const o=document.getElementById('vt');if(o)o.textContent=x};
+if(n++<3){noise=n===1?rms:Math.min(noise,rms);return}
+if(rms>(talk?th*.6:th)){if(!talk){talk=1;buf=pk.slice();ui('🎙️ Estou ouvindo você…')}quiet=0;buf.push(d)}else if(talk){buf.push(d);quiet+=d.length/ac.sampleRate*1000;if(quiet>=(sil||1800)){ui('Transcrevendo…');flush()}}else{noise=noise*.95+rms*.05;pk.push(d);if(pk.length>2)pk.shift()}};
 sc.connect(pr);pr.connect(ac.destination);rs={close:()=>{try{pr.onaudioprocess=null;pr.disconnect();sc.disconnect();sm.getTracks().forEach(t=>t.stop());ac.close()}catch(e){}}}}
 catch(e){noRec=1;if(alive)begin()}};
 const begin=()=>{if(gk()&&!noRec){recBegin();return}const C=nat();
