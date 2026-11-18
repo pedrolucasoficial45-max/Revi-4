@@ -21,15 +21,20 @@ jobs:
           java-version: 21
 
       - name: Instalar dependências
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Criar projeto Android
         run: npx cap add android
 
+      - name: Permissão de microfone
+        run: |
+          sed -i 's|<application|<uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <queries><intent><action android:name="android.speech.RecognitionService" /></intent></queries>\n    <application|' android/app/src/main/AndroidManifest.xml
+          grep -n "RECORD_AUDIO\|RecognitionService" android/app/src/main/AndroidManifest.xml
+
       - name: Gerar ícones do app
         continue-on-error: true
         run: |
-          npm install --no-save @capacitor/assets
+          npm install --no-save --legacy-peer-deps @capacitor/assets
           npx capacitor-assets generate --android
 
       - name: Sincronizar arquivos web
